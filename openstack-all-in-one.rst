@@ -92,7 +92,7 @@ Databases set up
 ----------------
 Use the following script to create all necessary databases and users::
 
-   wget https://raw2.github.com/Ch00k/OpenStack-Havana-Install-Guide/master/populate_database.sh
+   wget https://raw2.github.com/Ch00k/openstack-install-aio/master/populate_database.sh
    sh populate_database.sh
 
 Others
