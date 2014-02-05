@@ -128,13 +128,11 @@ Keystone
 
 * Fill up the Keystone database using the two scripts available in this repository::
    
-   wget https://raw2.github.com/Ch00k/OpenStack-Havana-Install-Guide/master/keystone_basic.sh
-   wget https://raw2.github.com/Ch00k/OpenStack-Havana-Install-Guide/master/keystone_endpoints_basic.sh
+   wget https://raw2.github.com/Ch00k/OpenStack-Havana-Install-Guide/master/populate_keystone.sh
 
-Modify the :code:`HOST_IP` and :code:`EXT_HOST_IP` variables in both scripts, then execute::
+Modify the :code:`HOST_IP` and :code:`EXT_HOST_IP` variables in both scripts if needed, then execute::
 
-   sh keystone_basic.sh
-   sh keystone_endpoints_basic.sh
+   sh populate_keystone.sh
 
 * Create a simple credential file and source it so you have your credentials loaded in your environnment::
 
