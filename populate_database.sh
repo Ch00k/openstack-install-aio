@@ -20,4 +20,8 @@ GRANT ALL ON nova.* TO 'nova'@'localhost' IDENTIFIED BY 'openstacktest';
 CREATE DATABASE cinder;
 GRANT ALL ON cinder.* TO 'cinder'@'%' IDENTIFIED BY 'openstacktest';
 GRANT ALL ON cinder.* TO 'cinder'@'localhost' IDENTIFIED BY 'openstacktest';
+
+CREATE DATABASE heat;
+GRANT ALL ON heat.* TO 'heat'@'%' IDENTIFIED BY 'openstacktest';
+GRANT ALL ON heat.* TO 'heat'@'localhost' IDENTIFIED BY 'openstacktest';
 EOF

@@ -128,7 +128,7 @@ Keystone
 
 * Fill up the Keystone database using the two scripts available in this repository::
    
-   wget https://raw2.github.com/Ch00k/OpenStack-Havana-Install-Guide/master/populate_keystone.sh
+   wget https://raw2.github.com/Ch00k/openstack-install-aio/master/populate_keystone.sh
 
 Modify the :code:`HOST_IP` and :code:`EXT_HOST_IP` variables in both scripts if needed, then execute::
 
@@ -136,7 +136,7 @@ Modify the :code:`HOST_IP` and :code:`EXT_HOST_IP` variables in both scripts if 
 
 * Create a simple credential file and source it so you have your credentials loaded in your environnment::
 
-   echo -e 'export OS_TENANT_NAME=admin\nexport OS_USERNAME=admin\nexport OS_PASSWORD=openstacktest\nexport OS_AUTH_URL="http://192.168.1.251:5000/v2.0/"' > ~/.keystone_source
+   echo -e 'export OS_TENANT_NAME=admin\nexport OS_USERNAME=admin\nexport OS_PASSWORD=openstacktest\nexport OS_AUTH_URL="http://192.168.1.251:5000/v2.0/"' > ~/.keystonerc
    source ~/.keystonerc
 
 Add sourcing of this file to :code:`~/.bashrc`::
@@ -295,6 +295,7 @@ Neutron
 
 * Update :code:`/etc/neutron/metadata_agent.ini`::
 
+   [DEFAULT]
    auth_url = http://10.10.10.51:35357/v2.0
    auth_region = RegionOne
    admin_tenant_name = service
@@ -356,7 +357,7 @@ Neutron
 
 * Restart all neutron services::
 
-   for i in $( ls /etc/init.d/neutron-* ); do service `basename $i` status; done
+   for i in $( ls /etc/init.d/neutron-* ); do service `basename $i` restart; done
    service dnsmasq restart
    
 Check Neutron agents (hopefully you'll enjoy smiling faces :-) )::
@@ -370,7 +371,7 @@ Nova
 
    apt-get install -y nova-api nova-cert novnc nova-consoleauth nova-scheduler nova-novncproxy nova-doc nova-conductor nova-compute-kvm
 
-* Add an entry to :code:`/etc/fstab` and mount /dev/sdb1 to :code:`/var/lib/nova/instances`::
+* Add an entry to :code:`/etc/fstab` and mount :code:`/dev/sdb1` to :code:`/var/lib/nova/instances`::
 
    echo "/dev/sdb1 /var/lib/nova/instances ext4 defaults 0 2" >> /etc/fstab
    mount /var/lib/nova/instances
@@ -558,10 +559,6 @@ Swift
 
    openssl req -new -x509 -nodes -out /etc/swift/cert.crt -keyout /etc/swift/cert.key
 
-* Restart the memcached server::
-   
-   service memcached restart
-
 * Because the distribution packages do not include a copy of the keystoneauth middleware, ensure that the proxy server includes them::
 
    git clone https://github.com/openstack/swift.git && cd swift && python setup.py install
@@ -618,15 +615,9 @@ Swift
 
 * Add entries to each ring::
 
-   swift-ring-builder account.builder add z1-10.10.10.51:6002/sdc1 100
-   swift-ring-builder container.builder add z1-10.10.10.51:6001/sdc1 100
-   swift-ring-builder object.builder add z1-10.10.10.51:6000/sdc1 100
-
-* Verify the ring contents for each ring::
-   
-   swift-ring-builder account.builder
-   swift-ring-builder container.builder
-   swift-ring-builder object.builder
+   swift-ring-builder account.builder add z1-10.10.10.51:6002/sdd1 100
+   swift-ring-builder container.builder add z1-10.10.10.51:6001/sdd1 100
+   swift-ring-builder object.builder add z1-10.10.10.51:6000/sdd1 100
 
 * Rebalance the rings::
 
@@ -717,9 +708,7 @@ Add the following to :code:`[DEFAULT]` section of :code:`/etc/glance/glance-api.
 
 Restart Glance services::
 
-   service glance-registry restart
-   service glance-api restart
-
+   service glance-registry restart && service glance-api restart
 
 * Enable Cinder agent::
 
@@ -730,8 +719,7 @@ Add the following to :code:`[DEFAULT]` section of :code:`/etc/cinder/cinder.conf
 
 Restart Cinder services::
 
-   service cinder-volume restart
-   service cinder-api restart
+   service cinder-volume restart && service cinder-api restart
 
 * Enable Swift agent::
 
@@ -745,15 +733,56 @@ Add ceilometer to the pipeline parameter of that same file::
    [pipeline:main]
    pipeline = healthcheck cache authtoken keystoneauth ceilometer proxy-server
 
+A workaround for https://bugs.launchpad.net/ceilometer/+bug/1262264::
+
+   chmod 777 /var/log/ceilometer
+
 Restart Swift proxy server::
 
-   service swift-proxy-server restart
+   swift-init proxy restart
+
+
+Heat
+====
+
+* Install Heat packages::
+
+   apt-get -y install heat-api heat-api-cfn heat-engine
+
+* Edit :code:`/etc/heat/heat.conf` like so::
+
+   [DEFAULT]
+   sql_connection = mysql://heat:openstacktest@10.10.10.51/heat
+   verbose = True
+   log_dir = /var/log/heat
+
+   [keystone_authtoken]
+   auth_host = 10.10.10.51
+   auth_port = 35357
+   auth_protocol = http
+   auth_uri = http://10.10.10.51:5000/v2.0
+   admin_tenant_name = service
+   admin_user = heat
+   admin_password = openstacktest
+
+   [ec2_authtoken]
+   auth_uri = http://10.10.10.51:5000/v2.0
+   keystone_ec2_uri = http://10.10.10.51:5000/v2.0/ec2tokens
+
+* Workaround for https://bugs.launchpad.net/devstack/+bug/1217334::
+
+   mkdir /etc/heat/environment.d
+   wget https://raw2.github.com/openstack/heat/master/etc/heat/environment.d/default.yaml -O /etc/heat/environment.d/default.yaml
+
+* Restart Heat services::
+
+   for i in $( ls /etc/init.d/heat-* ); do service `basename $i` restart; done
 
 
 Horizon
 =======
 
-* To install horizon, proceed like this::
+* Install Horizon packages and remove Ubuntu Horizon theme::
 
    apt-get -y install openstack-dashboard memcached && dpkg --purge openstack-dashboard-ubuntu-theme
 
