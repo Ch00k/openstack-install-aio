@@ -3,20 +3,12 @@
 ================================
 Thi guide is heavily based on `Marco Fornaro's <http://www.linkedin.com/profile/view?id=49858164>`_ <marco.fornaro@gmail.com> `installation guide <https://github.com/fornyx/OpenStack-Havana-Install-Guide>`_
 
+
 .. contents::
 
 
 Requirements
 ============
-
-Disks
------
-This guide assumes you have 3 disks in addition to the one that is mounted as "/". The final configuration should look as follows::
-
-   /dev/sda: operating system (ext4)
-   /dev/sdb: Nova instances (ext4)
-   /dev/sdc: Cinder (lvm)
-   /dev/sdd: Swift (xfs)
 
 Network
 -------
@@ -25,9 +17,11 @@ Two NICs are required and static addresses must be configured on them::
    eth0: 10.10.10.51
    eth1: 192.168.1.251
 
+*If your host is a virtual machine (VMWare or VirtualBox) then eth0 should a NAT adapter and eth1 should be a Bridged adapter*
+
 Operating system
----------------
-Ubuntu 12.04 Server x86_64
+----------------
+Ubuntu 12.04 Server 64-bit
 
 
 Preparing your node
@@ -35,7 +29,7 @@ Preparing your node
 
 Networking
 ----------
-* Only one NIC should have an internet access, the other is for most Openstack-related operations and configurations::
+Only one NIC should have Internet access, the other is for Openstack internal communication::
 
    # Not Internet connected (OpenStack management network)
    auto eth0
@@ -51,27 +45,27 @@ Networking
       gateway 192.168.1.1
       dns-nameservers 192.168.1.1
 
-Please Note that in this architecture the DNS nameserver and the default gateway are the same.
+*Please note that in this architecture the DNS nameserver and the default gateway are the same*
 
-* Enable udev persistent net. Add the following to :code:`/etc/udev/rules.d/70-persistent-net.rules`::
+Enable udev persistent net. Add the following to :code:`/etc/udev/rules.d/70-persistent-net.rules`::
 
    SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="<eth0_mac_address>", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="eth0"
    SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="<eth1_mac_address>", ATTR{dev_id}=="0x0", ATTR{type}=="1", KERNEL=="eth*", NAME="eth1"
 
 Replace :code:`<eth0_mac_address>` and :code:`<eth1_mac_address>` with real MAC addresses of your NICs
 
-* Restart networking service (reboot if the following does not work)::
+Restart networking service (reboot if the following does not work)::
 
    service networking restart
 
 Preparing Ubuntu
 -----------------
-* Add Havana repositories::
+Add Havana repositories::
 
    apt-get -y install ubuntu-cloud-keyring python-software-properties software-properties-common python-keyring
    echo deb http://ubuntu-cloud.archive.canonical.com/ubuntu precise-proposed/havana main >> /etc/apt/sources.list.d/havana.list
 
-* Update your system::
+Update your system::
 
    apt-get -y update && apt-get -y upgrade && apt-get -y dist-upgrade
 
@@ -79,11 +73,11 @@ It could be necessary to reboot your system in case you have a kernel upgrade
 
 MySQL, RabbitMQ, NTP
 --------------------
-* Install necessary packages::
+Install necessary packages::
 
    apt-get install -y mysql-server python-mysqldb rabbitmq-server ntp
 
-* Configure MySQL to accept incoming connections on all interfaces::
+Configure MySQL to accept incoming connections on all interfaces::
 
    sed -i 's/127.0.0.1/0.0.0.0/g' /etc/mysql/my.cnf
    service mysql restart
@@ -97,7 +91,7 @@ Use the following script to create all necessary databases and users::
 
 Others
 ------
-* Enable IP Forwarding::
+Enable IP Forwarding::
 
    sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 
@@ -109,24 +103,24 @@ To save you from rebooting, execute the following::
 Keystone
 ========
 
-* Install Keystone packages::
+Install Keystone packages::
 
    apt-get install -y keystone
 
-* Adapt the connection option in the :code:`/etc/keystone/keystone.conf` to the new database::
+Adapt the connection option in the :code:`/etc/keystone/keystone.conf` to the new database::
 
    connection = mysql://keystone:openstacktest@10.10.10.51/keystone
 
-* Remove Keystone SQLite database::
+Remove Keystone SQLite database::
 
    rm /var/lib/keystone/keystone.db
 
-* Restart the identity service then synchronize the database::
+Restart the identity service then synchronize the database::
 
    service keystone restart
    keystone-manage db_sync
 
-* Fill up the Keystone database using the two scripts available in this repository::
+Fill up the Keystone database using the two scripts available in this repository::
    
    wget https://raw2.github.com/Ch00k/openstack-install-aio/master/populate_keystone.sh
 
@@ -134,7 +128,7 @@ Modify the :code:`HOST_IP` and :code:`EXT_HOST_IP` variables in both scripts if 
 
    sh populate_keystone.sh
 
-* Create a simple credential file and source it so you have your credentials loaded in your environnment::
+Create a simple credential file and source it so you have your credentials loaded in your environnment::
 
    echo -e 'export OS_TENANT_NAME=admin\nexport OS_USERNAME=admin\nexport OS_PASSWORD=openstacktest\nexport OS_AUTH_URL="http://192.168.1.251:5000/v2.0/"' > ~/.keystonerc
    source ~/.keystonerc
@@ -143,7 +137,7 @@ Add sourcing of this file to :code:`~/.bashrc`::
 
    echo "source ~/.keystonerc" >> ~/.bashrc
 
-* To test if Keystone is working execute the following::
+To test if Keystone is working execute the following::
 
    keystone user-list
 
@@ -151,11 +145,11 @@ Add sourcing of this file to :code:`~/.bashrc`::
 Glance
 ======
 
-* Install Glance packages::
+Install Glance packages::
 
    apt-get -y install glance
 
-* Update :code:`/etc/glance/glance-api.conf` and :code:`/etc/glance/glance-registry.conf` with::
+Update :code:`/etc/glance/glance-api.conf` and :code:`/etc/glance/glance-registry.conf` with::
 
    [DEFAULT]
    sql_connection = mysql://glance:openstacktest@10.10.10.51/glance
@@ -171,7 +165,7 @@ Glance
    [paste_deploy]
    flavor = keystone
 
-* Update :code:`/etc/glance/glance-api-paste.ini` and :code:`/etc/glance/glance-registry-paste.ini` with::
+Update :code:`/etc/glance/glance-api-paste.ini` and :code:`/etc/glance/glance-registry-paste.ini` with::
 
    [filter:authtoken]
    paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
@@ -182,29 +176,29 @@ Glance
    admin_user = glance
    admin_password = openstacktest
 
-* Remove Glance's SQLite database::
+Remove Glance's SQLite database::
 
    rm /var/lib/glance/glance.sqlite   
 
-* Restart Glance services::
+Restart Glance services::
 
    service glance-api restart; service glance-registry restart
 
-* Synchronize Glance database::
+Synchronize Glance database::
 
    glance-manage db_sync
 
-* Restart the services again to take modifications into account::
+Restart the services again to take modifications into account::
 
    service glance-registry restart; service glance-api restart
 
-* To test Glance, upload the cirros cloud image and Ubuntu cloud image::
+To test Glance, upload the cirros cloud image and Ubuntu cloud image::
 
    glance image-create --name "Cirros 0.3.1" --is-public true --container-format bare --disk-format qcow2 --location http://cdn.download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img
    wget http://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img
    glance add name="Ubuntu 12.04 cloudimg amd64" is_public=true container_format=ovf disk_format=qcow2 < precise-server-cloudimg-amd64-disk1.img
    
-* Now list the image to see what you have just uploaded::
+Now list the image to see what you have just uploaded::
 
    glance image-list
    
@@ -214,11 +208,11 @@ Neutron
 
 OpenVSwitch
 -----------
-* Install OpenVSwitch::
+Install OpenVSwitch::
 
    apt-get install -y openvswitch-controller openvswitch-switch openvswitch-datapath-dkms 
 
-* Create bridges:
+Create bridges:
 
 br-int for VM interaction::
 
@@ -228,7 +222,7 @@ br-ex to give VMs access to the Internet::
 
    ovs-vsctl add-br br-ex
 
-* Modify network configuration of your host
+Modify network configuration of your host
 Edit :code:`eth1` in :code:`/etc/network/interfaces` to look like this::
 
    auto eth1
@@ -247,13 +241,13 @@ Add :code:`br-ex` inteface configuration to :code:`/etc/network/interfaces`::
       gateway 192.168.1.1
       dns-nameservers 192.168.1.1
 
-* Add :code:`eth1` to :code:`br-ex`::
+Add :code:`eth1` to :code:`br-ex`::
 
    ovs-vsctl add-port br-ex eth1
 
-Note that this will throw you out of the SSH session so you will need to reconnect.
+*Note that this will throw you out of the SSH session so you will need to reconnect*
 
-* Restart networking service (reboot if the following does not work)::
+Restart networking service (reboot if the following does not work)::
 
    service networking restart
 
@@ -261,15 +255,15 @@ Note that this will throw you out of the SSH session so you will need to reconne
 Neutron
 -------
 
-* Install Neutron packages::
+Install Neutron packages::
 
    apt-get install -y neutron-server neutron-plugin-openvswitch neutron-plugin-openvswitch-agent dnsmasq neutron-dhcp-agent neutron-l3-agent neutron-metadata-agent
 
-* Stop neutron-server::
+Stop neutron-server::
 
    service neutron-server stop
 
-* Edit :code:`/etc/neutron/neutron.conf`::
+Edit :code:`/etc/neutron/neutron.conf`::
 
    [keystone_authtoken]
    auth_host = 10.10.10.51
@@ -282,7 +276,7 @@ Neutron
    [database]
    connection = mysql://neutron:openstacktest@10.10.10.51/neutron
 
-* Edit :code:`/etc/neutron/api-paste.ini`::
+Edit :code:`/etc/neutron/api-paste.ini`::
 
    [filter:authtoken]
    paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
@@ -293,7 +287,7 @@ Neutron
    admin_user = neutron
    admin_password = openstacktest
 
-* Update :code:`/etc/neutron/metadata_agent.ini`::
+Update :code:`/etc/neutron/metadata_agent.ini`::
 
    [DEFAULT]
    auth_url = http://10.10.10.51:35357/v2.0
@@ -305,7 +299,7 @@ Neutron
    nova_metadata_port = 8775
    metadata_proxy_shared_secret = helloOpenStack
 
-* Edit :code:`/etc/neutron/l3_agent.ini`::
+Edit :code:`/etc/neutron/l3_agent.ini`::
 
    [DEFAULT]
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
@@ -320,7 +314,7 @@ Neutron
    root_helper = sudo neutron-rootwrap /etc/neutron/rootwrap.conf
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
 
-* Edit :code:`/etc/neutron/dhcp_agent.ini`::
+Edit :code:`/etc/neutron/dhcp_agent.ini`::
 
    [DEFAULT]
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
@@ -335,7 +329,7 @@ Neutron
    root_helper = sudo neutron-rootwrap /etc/neutron/rootwrap.conf
    state_path = /var/lib/neutron
 
-* Edit the OVS plugin configuration file :code:`/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini` with::: 
+Edit the OVS plugin configuration file :code:`/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini` with::: 
 
    [database]
    sql_connection=mysql://neutron:openstacktest@10.10.10.51/neutron
@@ -351,32 +345,27 @@ Neutron
    [securitygroup]
    firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
 
-* Remove Neutron's SQLite database::
+Remove Neutron's SQLite database::
 
    rm /var/lib/neutron/neutron.sqlite
 
-* Restart all neutron services::
+Restart all neutron services::
 
    for i in $( ls /etc/init.d/neutron-* ); do service `basename $i` restart; done
    service dnsmasq restart
    
-Check Neutron agents (hopefully you'll enjoy smiling faces :-) )::
+Check Neutron agents (hopefully you'll enjoy smiling faces :-* ) )::
 
    neutron agent-list
 
 Nova
 ====
 
-* Install Nova packages::
+Install Nova packages::
 
    apt-get install -y nova-api nova-cert novnc nova-consoleauth nova-scheduler nova-novncproxy nova-doc nova-conductor nova-compute-kvm
 
-* Add an entry to :code:`/etc/fstab` and mount :code:`/dev/sdb1` to :code:`/var/lib/nova/instances`::
-
-   echo "/dev/sdb1 /var/lib/nova/instances ext4 defaults 0 2" >> /etc/fstab
-   mount /var/lib/nova/instances
-
-* Modify the :code:`/etc/nova/nova.conf` like this::
+Modify the :code:`/etc/nova/nova.conf` like this::
 
    [DEFAULT]
    logdir=/var/log/nova
@@ -434,7 +423,7 @@ Nova
    osapi_volume_listen_port=5900
    cinder_catalog_info=volume:cinder:internalURL
 
-* Edit the :code:`/etc/nova/nova-compute.conf`::
+Edit the :code:`/etc/nova/nova-compute.conf`::
 
    [DEFAULT]
    libvirt_type=kvm
@@ -443,7 +432,7 @@ Nova
    libvirt_vif_driver=nova.virt.libvirt.vif.LibvirtHybridOVSBridgeDriver
    libvirt_use_virtio_for_bridges=True
 
-* Modify authtoken section in :code:`/etc/nova/api-paste.ini` to this::
+Modify authtoken section in :code:`/etc/nova/api-paste.ini` to this::
 
    [filter:authtoken]
    paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
@@ -456,23 +445,23 @@ Nova
    signing_dirname = /tmp/keystone-signing-nova
    auth_version = v2.0
     
-* Restart Nova services::
+Restart Nova services::
 
    for i in $( ls /etc/init.d/nova-* ); do service `basename $i` restart; done
 
-* Remove Nova's SQLite database::
+Remove Nova's SQLite database::
 
    rm /var/lib/nova/nova.sqlite
 
-* Synchronize your database::
+Synchronize your database::
 
    nova-manage db sync
 
-* Restart Nova services::
+Restart Nova services::
 
    for i in $( ls /etc/init.d/nova-* ); do service `basename $i` restart; done
 
-* Hopefully you should enjoy smiling faces on Nova services to confirm your installation::
+Hopefully you should enjoy smiling faces on Nova services to confirm your installation::
 
    nova-manage service list
    
@@ -480,11 +469,22 @@ Nova
 Cinder
 ======
 
-* Install Cinder packages::
+Install Cinder packages::
 
    apt-get install -y cinder-api cinder-scheduler cinder-volume
 
-* Edit the :code:`/etc/cinder/cinder.conf` to::
+Create and mount a loopback device to be used as the volume group for Cinder volumes, then create the volume group::
+
+   dd if=/dev/zero of=/opt/cinder-volumes bs=1 count=0 seek=100G
+   losetup /dev/loop2 /opt/cinder-volumes
+   pvcreate /dev/loop2
+   vgcreate cinder-volumes /dev/loop2
+
+To make the loopback device persistent between reboots add the following to :code:`/etc/rc.local` (before :code:`exit 0` line!)::
+
+   losetup /dev/loop2 /opt/cinder-volumes
+
+Edit the :code:`/etc/cinder/cinder.conf` to::
 
    [DEFAULT]
    rootwrap_config=/etc/cinder/rootwrap.conf
@@ -496,7 +496,7 @@ Cinder
    auth_strategy = keystone
    volume_clear = none
 
-* Configure :code:`/etc/cinder/api-paste.ini` like the following::
+Configure :code:`/etc/cinder/api-paste.ini` like the following::
 
    [filter:authtoken]
    paste.filter_factory = keystoneclient.middleware.auth_token:filter_factory
@@ -510,22 +510,15 @@ Cinder
    admin_user = cinder
    admin_password = openstacktest
 
-* Remove Cinder's SQLite database::
+Remove Cinder's SQLite database::
 
    rm /var/lib/cinder/cinder.sqlite
 
-* Then, synchronize the database::
+Then, synchronize the database::
 
    cinder-manage db sync
 
-* Finally, don't forget to create a volume group and name it :code:`cinder-volumes`::
-
-   fdisk /dev/sdc
-   mkfs.ext4 /dev/sdc1
-   pvcreate /dev/sdc1
-   vgcreate cinder-volumes /dev/sdc2
-
-* Restart the cinder services::
+Restart the cinder services::
 
    for i in $( ls /etc/init.d/cinder-* ); do service `basename $i` restart; done
 
@@ -533,37 +526,42 @@ Cinder
 Swift
 =====
 
-* Install Swift packages::
+Install Swift packages::
 
    apt-get -y install swift swift-account swift-container swift-object swift-proxy openssh-server memcached python-pip python-netifaces python-xattr python-memcache xfsprogs python-keystoneclient python-swiftclient python-webob git
 
-* Create configuration diretory::
+Create configuration diretory::
 
    mkdir -p /etc/swift && chown -R swift:swift /etc/swift/
 
-* Create :code:`/etc/swift/swift.conf` like the following::
+Create :code:`/etc/swift/swift.conf` like the following::
 
    [swift-hash]
    swift_hash_path_suffix = openstacktest
 
-* Create and mount an XFS partition for object storage::
+Create and mount an XFS partition for object storage::
    
-   fdisk /dev/sdd
-   mkfs.xfs /dev/sdd1
-   echo "/dev/sdd1 /srv/node/sdd1 xfs noatime,nodiratime,nobarrier,logbufs=8 0 0" >> /etc/fstab
-   mkdir -p /srv/node/sdd1
-   mount /srv/node/sdd1
+   dd if=/dev/zero of=/opt/swift-objects bs=1 count=0 seek=50G
+   losetup /dev/loop3 /opt/swift-objects
+   mkfs.xfs /dev/loop3
+   mkdir -p /srv/node/sdb
+   mount /dev/loop3 /srv/node/sdb
    chown -R swift:swift /srv/node
 
-* Create self-signed cert for SSL::
+To make the loopback device persistent between reboots add the following to :code:`/etc/rc.local` (before :code:`exit 0` line!)::
+
+   losetup /dev/loop3 /opt/swift-objects
+   mount /dev/loop3 /srv/node/sdb
+
+Create self-signed cert for SSL::
 
    openssl req -new -x509 -nodes -out /etc/swift/cert.crt -keyout /etc/swift/cert.key
 
-* Because the distribution packages do not include a copy of the keystoneauth middleware, ensure that the proxy server includes them::
+Because the distribution packages do not include a copy of the keystoneauth middleware, ensure that the proxy server includes them::
 
    git clone https://github.com/openstack/swift.git && cd swift && python setup.py install
 
-* Create :code:`/etc/swift/proxy-server.conf`::
+Create :code:`/etc/swift/proxy-server.conf`::
 
    [DEFAULT]
    bind_port = 8080
@@ -602,34 +600,34 @@ Swift
    [filter:healthcheck]
    use = egg:swift#healthcheck
 
-* Create the :code:`signing_dir` and set its permissions accordingly::
+Create the :code:`signing_dir` and set its permissions accordingly::
    
    mkdir -p /home/swift/keystone-signing && chown -R swift:swift /home/swift/keystone-signing
 
-* Create the account, container, and object rings::
+Create the account, container, and object rings::
 
    cd /etc/swift
    swift-ring-builder account.builder create 18 3 1
    swift-ring-builder container.builder create 18 3 1
    swift-ring-builder object.builder create 18 3 1
 
-* Add entries to each ring::
+Add entries to each ring::
 
-   swift-ring-builder account.builder add z1-10.10.10.51:6002/sdd1 100
-   swift-ring-builder container.builder add z1-10.10.10.51:6001/sdd1 100
-   swift-ring-builder object.builder add z1-10.10.10.51:6000/sdd1 100
+   swift-ring-builder account.builder add z1-10.10.10.51:6002/sdb 100
+   swift-ring-builder container.builder add z1-10.10.10.51:6001/sdb 100
+   swift-ring-builder object.builder add z1-10.10.10.51:6000/sdb 100
 
-* Rebalance the rings::
+Rebalance the rings::
 
    swift-ring-builder account.builder rebalance
    swift-ring-builder container.builder rebalance
    swift-ring-builder object.builder rebalance
 
-* Make sure the swift user owns all configuration files::
+Make sure the swift user owns all configuration files::
 
    chown -R swift:swift /etc/swift
 
-* Start Swift services::
+Start Swift services::
 
    swift-init main start && service rsyslog restart && service memcached restart
 
@@ -637,19 +635,19 @@ Swift
 Ceilometer
 ==========
 
-* Install the required packages::
+Install the required packages::
 
    apt-get -y install ceilometer-api ceilometer-collector ceilometer-agent-central python-ceilometerclient ceilometer-agent-compute mongodb
 
-* Change :code:`bind_ip` in :code:`/etc/mongodb.conf`::
+Change :code:`bind_ip` in :code:`/etc/mongodb.conf`::
 
    sed -i 's/127.0.0.1/10.10.10.51/g' /etc/mongodb.conf
 
-* Restart the MongoDB service::
+Restart the MongoDB service::
 
    service mongodb restart
 
-* Create the database and a ceilometer database user::
+Create the database and a ceilometer database user::
 
    mongo --host 10.10.10.51
    > use ceilometer
@@ -658,7 +656,7 @@ Ceilometer
                  roles: [ "readWrite", "dbAdmin" ]
                } )
 
-* Edit :code:`/etc/ceilometer/ceilometer.conf` like so::
+Edit :code:`/etc/ceilometer/ceilometer.conf` like so::
 
    [DEFAULT]
    log_dir = /var/log/ceilometer
@@ -682,11 +680,11 @@ Ceilometer
    os_tenant_name = service
    os_password = openstacktest
 
-* Restart Ceilometer services::
+Restart Ceilometer services::
 
    for i in $( ls /etc/init.d/ceilometer-* ); do service `basename $i` restart; done
 
-* Enable Compute agent
+Enable Compute agent
 
 Add the following to :code:`[DEFAULT]` section of :code:`/etc/nova/nova.conf`::
 
@@ -700,7 +698,7 @@ Restart compute agent::
 
    service ceilometer-agent-compute restart
 
-* Enable Glance agent::
+Enable Glance agent::
 
 Add the following to :code:`[DEFAULT]` section of :code:`/etc/glance/glance-api.conf`::
 
@@ -710,7 +708,7 @@ Restart Glance services::
 
    service glance-registry restart && service glance-api restart
 
-* Enable Cinder agent::
+Enable Cinder agent::
 
 Add the following to :code:`[DEFAULT]` section of :code:`/etc/cinder/cinder.conf`::
 
@@ -721,7 +719,7 @@ Restart Cinder services::
 
    service cinder-volume restart && service cinder-api restart
 
-* Enable Swift agent::
+Enable Swift agent::
 
 Add the following to :code:`/etc/swift/proxy-server.conf`::
 
@@ -745,11 +743,11 @@ Restart Swift proxy server::
 Heat
 ====
 
-* Install Heat packages::
+Install Heat packages::
 
    apt-get -y install heat-api heat-api-cfn heat-engine
 
-* Edit :code:`/etc/heat/heat.conf` like so::
+Edit :code:`/etc/heat/heat.conf` like so::
 
    [DEFAULT]
    sql_connection = mysql://heat:openstacktest@10.10.10.51/heat
@@ -769,12 +767,16 @@ Heat
    auth_uri = http://10.10.10.51:5000/v2.0
    keystone_ec2_uri = http://10.10.10.51:5000/v2.0/ec2tokens
 
-* Workaround for https://bugs.launchpad.net/devstack/+bug/1217334::
+Workaround for https://bugs.launchpad.net/devstack/+bug/1217334::
 
    mkdir /etc/heat/environment.d
    wget https://raw2.github.com/openstack/heat/master/etc/heat/environment.d/default.yaml -O /etc/heat/environment.d/default.yaml
 
-* Restart Heat services::
+Synchronize Heat database::
+
+   heat-manage db_sync
+
+Restart Heat services::
 
    for i in $( ls /etc/init.d/heat-* ); do service `basename $i` restart; done
 
@@ -782,15 +784,15 @@ Heat
 Horizon
 =======
 
-* Install Horizon packages and remove Ubuntu Horizon theme::
+Install Horizon packages and remove Ubuntu Horizon theme::
 
    apt-get -y install openstack-dashboard memcached && dpkg --purge openstack-dashboard-ubuntu-theme
 
-* Reload Apache and memcached::
+Reload Apache and memcached::
 
    service apache2 restart; service memcached restart
 
-You can now access your OpenStack installation **192.168.1.251/horizon** with credentials **admin:openstacktest**.
+You can now access your OpenStack installation :code:`192.168.1.251/horizon` with credentials :code:`admin:openstacktest`.
 
 
 Licensing
