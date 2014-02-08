@@ -10,6 +10,25 @@ Thi guide is heavily based on `Marco Fornaro's <http://www.linkedin.com/profile/
 Requirements
 ============
 
+Operating system
+----------------
+Ubuntu 12.04 Server 64-bit
+
+Disk
+----
+This guide assumes your disk is partitioned as follows:
+
+=========  =======================  ==============  ===================
+Partition  Filesystem               Mount point     Size
+=========  =======================  ==============  ===================
+/dev/sda1  swap                     n/a             (Amount of RAM) * 2
+/dev/sda2  ext4                     /               30+ GB
+/dev/sda3  none                     n/a             30+ GB
+/dev/sda4  xfs                      /srv/node/sda4  10+ GB
+=========  =======================  ==============  ===================
+
+When installing Ubuntu select "Manual" on the disk partitioning screen an create partitions as shown in the table
+
 Network
 -------
 Two NICs are required and static addresses must be configured on them::
@@ -18,10 +37,6 @@ Two NICs are required and static addresses must be configured on them::
    eth1: 192.168.1.251
 
 *If your host is a virtual machine (VMWare or VirtualBox) then eth0 should a NAT adapter and eth1 should be a Bridged adapter*
-
-Operating system
-----------------
-Ubuntu 12.04 Server 64-bit
 
 
 Preparing your node
@@ -222,7 +237,8 @@ br-ex to give VMs access to the Internet::
 
    ovs-vsctl add-br br-ex
 
-Modify network configuration of your host
+Modify network configuration of your host.
+
 Edit :code:`eth1` in :code:`/etc/network/interfaces` to look like this::
 
    auto eth1
@@ -272,6 +288,7 @@ Edit :code:`/etc/neutron/neutron.conf`::
    admin_tenant_name = service
    admin_user = neutron
    admin_password = openstacktest
+   signing_dir = $state_path/keystone-signing
    
    [database]
    connection = mysql://neutron:openstacktest@10.10.10.51/neutron
@@ -287,7 +304,7 @@ Edit :code:`/etc/neutron/api-paste.ini`::
    admin_user = neutron
    admin_password = openstacktest
 
-Update :code:`/etc/neutron/metadata_agent.ini`::
+Edit :code:`/etc/neutron/metadata_agent.ini` like so::
 
    [DEFAULT]
    auth_url = http://10.10.10.51:35357/v2.0
@@ -299,7 +316,7 @@ Update :code:`/etc/neutron/metadata_agent.ini`::
    nova_metadata_port = 8775
    metadata_proxy_shared_secret = helloOpenStack
 
-Edit :code:`/etc/neutron/l3_agent.ini`::
+Edit :code:`/etc/neutron/l3_agent.ini` like so::
 
    [DEFAULT]
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
@@ -314,7 +331,7 @@ Edit :code:`/etc/neutron/l3_agent.ini`::
    root_helper = sudo neutron-rootwrap /etc/neutron/rootwrap.conf
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
 
-Edit :code:`/etc/neutron/dhcp_agent.ini`::
+Edit :code:`/etc/neutron/dhcp_agent.ini` like so::
 
    [DEFAULT]
    interface_driver = neutron.agent.linux.interface.OVSInterfaceDriver
@@ -329,10 +346,7 @@ Edit :code:`/etc/neutron/dhcp_agent.ini`::
    root_helper = sudo neutron-rootwrap /etc/neutron/rootwrap.conf
    state_path = /var/lib/neutron
 
-Edit the OVS plugin configuration file :code:`/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini` with::: 
-
-   [database]
-   sql_connection=mysql://neutron:openstacktest@10.10.10.51/neutron
+Edit the OVS plugin configuration file :code:`/etc/neutron/plugins/openvswitch/ovs_neutron_plugin.ini` like so:: 
 
    [ovs]
    tenant_network_type = gre
@@ -345,6 +359,9 @@ Edit the OVS plugin configuration file :code:`/etc/neutron/plugins/openvswitch/o
    [securitygroup]
    firewall_driver = neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver
 
+   [database]
+   sql_connection=mysql://neutron:openstacktest@10.10.10.51/neutron
+
 Remove Neutron's SQLite database::
 
    rm /var/lib/neutron/neutron.sqlite
@@ -354,7 +371,7 @@ Restart all neutron services::
    for i in $( ls /etc/init.d/neutron-* ); do service `basename $i` restart; done
    service dnsmasq restart
    
-Check Neutron agents (hopefully you'll enjoy smiling faces :-* ) )::
+Check Neutron agents (hopefully you'll enjoy smiling faces :-) )::
 
    neutron agent-list
 
@@ -402,23 +419,20 @@ Modify the :code:`/etc/nova/nova.conf` like this::
    neutron_admin_auth_url=http://10.10.10.51:35357/v2.0
    libvirt_vif_driver=nova.virt.libvirt.vif.LibvirtHybridOVSBridgeDriver
    linuxnet_interface_driver=nova.network.linux_net.LinuxOVSInterfaceDriver
-   #If you want Neutron + Nova Security groups
-   #firewall_driver=nova.virt.firewall.NoopFirewallDriver
-   #security_group_api=neutron
-   #If you want Nova Security groups only, comment the two lines above and uncomment line -1-.
-   #-1-firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
+   firewall_driver=nova.virt.firewall.NoopFirewallDriver
+   security_group_api=neutron
    
-   #Metadata
+   # Metadata
    service_neutron_metadata_proxy = True
    neutron_metadata_proxy_shared_secret = helloOpenStack
    metadata_host = 10.10.10.51
    metadata_listen = 10.10.10.51
    metadata_listen_port = 8775
    
-   # Compute #
+   # Compute
    compute_driver=libvirt.LibvirtDriver
    
-   # Cinder #
+   # Cinder
    volume_api_class=nova.volume.cinder.API
    osapi_volume_listen_port=5900
    cinder_catalog_info=volume:cinder:internalURL
@@ -473,16 +487,10 @@ Install Cinder packages::
 
    apt-get install -y cinder-api cinder-scheduler cinder-volume
 
-Create and mount a loopback device to be used as the volume group for Cinder volumes, then create the volume group::
+Create a physical volume and a volume group on the :code:`/dev/sda3` partition you created during OS installation::
 
-   dd if=/dev/zero of=/opt/cinder-volumes bs=1 count=0 seek=100G
-   losetup /dev/loop2 /opt/cinder-volumes
-   pvcreate /dev/loop2
-   vgcreate cinder-volumes /dev/loop2
-
-To make the loopback device persistent between reboots add the following to :code:`/etc/rc.local` (before :code:`exit 0` line!)::
-
-   losetup /dev/loop2 /opt/cinder-volumes
+   pvcreate /dev/sda3
+   vgcreate cinder-volumes /dev/sda3
 
 Edit the :code:`/etc/cinder/cinder.conf` to::
 
@@ -490,11 +498,12 @@ Edit the :code:`/etc/cinder/cinder.conf` to::
    rootwrap_config=/etc/cinder/rootwrap.conf
    sql_connection = mysql://cinder:openstacktest@10.10.10.51/cinder
    api_paste_config = /etc/cinder/api-paste.ini
-   iscsi_helper=ietadm
+   iscsi_helper = tgtadm
    volume_name_template = volume-%s
    volume_group = cinder-volumes
    auth_strategy = keystone
    volume_clear = none
+   state_path = /var/lib/cinder
 
 Configure :code:`/etc/cinder/api-paste.ini` like the following::
 
@@ -520,6 +529,7 @@ Then, synchronize the database::
 
 Restart the cinder services::
 
+   service tgt restart
    for i in $( ls /etc/init.d/cinder-* ); do service `basename $i` restart; done
 
 
@@ -539,19 +549,9 @@ Create :code:`/etc/swift/swift.conf` like the following::
    [swift-hash]
    swift_hash_path_suffix = openstacktest
 
-Create and mount an XFS partition for object storage::
+Change ownership on the XFS partition mountpoint::
    
-   dd if=/dev/zero of=/opt/swift-objects bs=1 count=0 seek=50G
-   losetup /dev/loop3 /opt/swift-objects
-   mkfs.xfs /dev/loop3
-   mkdir -p /srv/node/sdb
-   mount /dev/loop3 /srv/node/sdb
    chown -R swift:swift /srv/node
-
-To make the loopback device persistent between reboots add the following to :code:`/etc/rc.local` (before :code:`exit 0` line!)::
-
-   losetup /dev/loop3 /opt/swift-objects
-   mount /dev/loop3 /srv/node/sdb
 
 Create self-signed cert for SSL::
 
@@ -613,9 +613,9 @@ Create the account, container, and object rings::
 
 Add entries to each ring::
 
-   swift-ring-builder account.builder add z1-10.10.10.51:6002/sdb 100
-   swift-ring-builder container.builder add z1-10.10.10.51:6001/sdb 100
-   swift-ring-builder object.builder add z1-10.10.10.51:6000/sdb 100
+   swift-ring-builder account.builder add z1-10.10.10.51:6002/sda4 100
+   swift-ring-builder container.builder add z1-10.10.10.51:6001/sda4 100
+   swift-ring-builder object.builder add z1-10.10.10.51:6000/sda4 100
 
 Rebalance the rings::
 
@@ -642,9 +642,6 @@ Install the required packages::
 Change :code:`bind_ip` in :code:`/etc/mongodb.conf`::
 
    sed -i 's/127.0.0.1/10.10.10.51/g' /etc/mongodb.conf
-
-Restart the MongoDB service::
-
    service mongodb restart
 
 Create the database and a ceilometer database user::
