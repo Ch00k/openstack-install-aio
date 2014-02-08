@@ -152,10 +152,6 @@ Add sourcing of this file to :code:`~/.bashrc`::
 
    echo "source ~/.keystonerc" >> ~/.bashrc
 
-To test if Keystone is working execute the following::
-
-   keystone user-list
-
 
 Glance
 ======
@@ -206,16 +202,6 @@ Synchronize Glance database::
 Restart the services again to take modifications into account::
 
    service glance-registry restart; service glance-api restart
-
-To test Glance, upload the cirros cloud image and Ubuntu cloud image::
-
-   glance image-create --name "Cirros 0.3.1" --is-public true --container-format bare --disk-format qcow2 --location http://cdn.download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img
-   wget http://cloud-images.ubuntu.com/precise/current/precise-server-cloudimg-amd64-disk1.img
-   glance add name="Ubuntu 12.04 cloudimg amd64" is_public=true container_format=ovf disk_format=qcow2 < precise-server-cloudimg-amd64-disk1.img
-   
-Now list the image to see what you have just uploaded::
-
-   glance image-list
    
 
 Neutron
@@ -790,6 +776,58 @@ Reload Apache and memcached::
    service apache2 restart; service memcached restart
 
 You can now access your OpenStack installation :code:`192.168.1.251/horizon` with credentials :code:`admin:openstacktest`.
+
+
+Check installation
+==================
+
+Create external and internal networks and a router::
+
+   neutron net-create ext_net --router:external True
+   neutron subnet-create ext_net --name ext_subnet --allocation-pool start=192.168.1.5,end=192.168.1.54 --disable-dhcp 192.168.1.0/24
+   neutron net-create int_net # note the id listed in response
+   neutron subnet-create int_net --name int_subnet --dns-nameserver 192.168.1.1 50.60.70.0/24
+   neutron router-create router_1
+   neutron router-gateway-set router_1 ext_net
+   neutron router-interface-add router_1 int_subnet
+
+Add permissive rules to default security group::
+
+   nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
+   nova secgroup-add-rule default tcp 1 65535 0.0.0.0/0
+   nova secgroup-add-rule default udp 1 65535 0.0.0.0/0
+
+Create an image::
+
+   glance image-create --name "CirrOS 0.3.1" --disk-format qcow2 --container-format bare --location http://cdn.download.cirros-cloud.net/0.3.1/cirros-0.3.1-x86_64-disk.img --is-public True
+
+Create a keypair::
+
+   nova keypair-add --pub-key ~/.ssh/id_rsa.pub key_1
+
+Create an instance::
+
+   nova boot --flavor m1.tiny --image "CirrOS 0.3.1" --nic net-id=<id of int_net> --key-name key_1 cirros
+
+Allocate a floating IP to project::
+
+   nova floating-ip-create ext_net
+
+Assign floating IP to instance::
+   
+   nova add-floating-ip cirros 192.168.1.6
+
+Create a volume and attach it to the instance::
+
+   cinder create --display-name volume_1 5 # note the id listed in response 
+   nova volume-attach cirros <id of volume_1> /dev/vdb
+
+Create a container and upload a file to it::
+
+   swift post container_1
+   swift upload container_1 .bashrc
+   
+
 
 
 Licensing
