@@ -15,8 +15,8 @@
 # License: Apache Software License (ASL) 2.0
 #
 
-HOST_IP=10.10.10.51
-EXT_HOST_IP=192.168.1.251
+HOST_IP=
+EXT_HOST_IP=
 
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-openstacktest}
 SERVICE_PASSWORD=${SERVICE_PASSWORD:-openstacktest}
