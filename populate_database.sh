@@ -1,6 +1,6 @@
 #!/bin/sh
 
-mysql -u root -p << EOF
+mysql -uroot -p << EOF
 CREATE DATABASE keystone;
 GRANT ALL ON keystone.* TO 'keystone'@'%' IDENTIFIED BY 'openstacktest';
 GRANT ALL ON keystone.* TO 'keystone'@'localhost' IDENTIFIED BY 'openstacktest';
